@@ -4,7 +4,8 @@ use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 use serenity::{
     all::{
-        ClientBuilder, Context, CreateMessage, EventHandler, GatewayIntents, Message, Ready, UserId,
+        ClientBuilder, Context, CreateMessage, EventHandler, GatewayIntents, GetMessages, Message,
+        Ready, UserId,
     },
     async_trait,
 };
@@ -36,6 +37,7 @@ impl EventHandler for Handler {
                 .await;
             if let Ok(data) = res {
                 let ip = data.json::<ApiResponse>().await.unwrap();
+                tracing::info!("IP Reaady: {}", ip.ip);
                 let message = CreateMessage::new().content(ip.ip);
                 if let Err(why) = user.dm(&ctx, message).await {
                     println!("Error sending message: {:?}", why);
@@ -45,18 +47,22 @@ impl EventHandler for Handler {
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
+        let id = env::var("USER_ID").expect("Expected a user_id in the environment");
+        let user_id = UserId::new(id.parse().unwrap());
         if msg.content == "!ip" {
-            let client = reqwest::Client::new();
-            let res = client
-                .get("https://api.ipify.org?format=json")
-                .header(CONTENT_TYPE, "Content-Type: application/json")
-                .send()
-                .await;
-            if let Ok(data) = res {
-                let ip = data.json::<ApiResponse>().await.unwrap();
-                tracing::info!("IP: {}", ip.ip);
-                if let Err(why) = msg.channel_id.say(&ctx.http, &ip.ip).await {
-                    println!("Error sending message: {why:?}");
+            if msg.author.id == user_id {
+                let client = reqwest::Client::new();
+                let res = client
+                    .get("https://api.ipify.org?format=json")
+                    .header(CONTENT_TYPE, "Content-Type: application/json")
+                    .send()
+                    .await;
+                if let Ok(data) = res {
+                    let ip = data.json::<ApiResponse>().await.unwrap();
+                    tracing::info!("IP Message: {}", ip.ip);
+                    if let Err(why) = msg.channel_id.say(&ctx.http, &ip.ip).await {
+                        println!("Error sending message: {why:?}");
+                    }
                 }
             }
         }
